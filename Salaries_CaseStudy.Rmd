@@ -1,0 +1,468 @@
+---
+title: <center>Salaries - Case Study</center>
+author: <center>Shajakhan Yacob Ali</center>
+output:
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA)
+```
+
+#### $\color{Red}{\text{Loading required packages}}$
+```{r "Loading Packages", message= FALSE}
+library(car)
+library(tidyverse)
+library(ggrepel)
+library(broom)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(pROC)
+```
+&nbsp;
+
+#### $\color{red}{\text{Exploratory Data Analysis}}$
+```{r "str & summary"}
+Salaries <- as.tbl(Salaries)
+str(Salaries)
+summary(Salaries)
+```
+&nbsp;
+
+#### $\color{green}{\text{Checking for Missing Values}}$
+```{r "Missing Values"}
+map_dbl(Salaries, function(x) sum(is.na(x)))
+```
+&nbsp;
+
+#### $\color{green}{\text{Salary Distribution}}$
+```{r "Salary Distribution"}
+Salaries %>%
+  ggplot(aes(salary)) +
+  geom_histogram(binwidth = 12500, fill = "grey") +
+  geom_vline(aes(xintercept = mean(Salaries$salary), col = "blue"), linetype = 2) +
+  geom_vline(aes(xintercept = median(Salaries$salary), col = "green"), linetype = 2) +
+  geom_vline(aes(xintercept = quantile(Salaries$salary, 0.25), col = "red"), linetype = 2) +
+  geom_vline(aes(xintercept = quantile(Salaries$salary, 0.75), col = "red"), linetype = 2) +
+  scale_color_manual("Line Color", values = c("blue" = "blue", "green" = "green", "red" = "red"),
+                     labels = c("Mean", "Median", "Lower & Upper Quartiles")) +
+  scale_x_continuous(breaks = seq(50000, 250000, 10000)) +
+  theme(legend.position = c(0.85, 0.85), 
+        legend.text=element_text(size=8),
+        axis.text.x = element_text(angle = 90))
+
+Salaries %>%
+  arrange(desc(salary))
+```
+&nbsp;
+
+#### $\color{green}{\text{Salary by different Categorical Variables}}$
+##### $\color{blue}{\text{Salary by rank}}$
+```{r "Salary by rank"}
+Salaries %>%
+  ggplot(aes(rank, salary)) +
+  geom_boxplot()
+```
+&nbsp;
+
+##### $\color{blue}{\text{Salary by discipline}}$
+```{r "Salary by discipline"}
+Salaries %>%
+  ggplot(aes(discipline, salary)) +
+  geom_boxplot()
+```
+&nbsp;
+
+##### $\color{blue}{\text{Salary by sex}}$
+```{r "Salary by sex"}
+Salaries %>%
+  ggplot(aes(sex, salary)) +
+  geom_boxplot()
+```
+&nbsp;
+
+##### $\color{blue}{\text{Salary by rank, sex and discipline}}$
+```{r "Salary by rank, sex and discipline"}  
+# Frequency Table
+Salaries %>%
+  group_by(sex, rank, discipline) %>%
+  count()
+
+Salaries %>%
+  ggplot(aes(rank, salary)) +
+  geom_boxplot() +
+  facet_grid(sex ~ discipline)
+```
+
+&nbsp;
+
+#### $\color{green}{\text{Salary vs Continuous Variables}}$
+##### $\color{blue}{\text{salary vs yrs.since.phd}}$
+```{r "salary vs yrs.since.phd"}  
+ggplot(Salaries, aes(yrs.since.phd, salary)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  annotate("text", x = 4, y = 220000, parse = TRUE, col = "purple", 
+           label = str_c("~r ==~", round(cor(Salaries$yrs.since.phd, Salaries$salary), 4))) +
+  annotate("text", x = 4, y = 210000, parse = TRUE, col = "purple", 
+           label = str_c("~r^2==~", round(cor(Salaries$yrs.since.phd, Salaries$salary) ^ 2, 4)))
+```
+&nbsp;
+
+##### $\color{blue}{\text{salary vs yrs.since.phd by rank & discipline}}$
+```{r "salary vs yrs.since.phd by rank, discipline"}  
+Salaries %>%
+  group_by(discipline, rank) %>%
+  summarise(cor = round(cor(yrs.since.phd, salary), 4)) %>%
+  mutate(cor = str_c("r = ", cor)) %>%
+  as.data.frame() -> cor_yrs.since.phd_salary
+
+ggplot(Salaries, aes(yrs.since.phd, salary, col = rank, shape = discipline)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(rank ~ discipline) +
+  geom_text(data = cor_yrs.since.phd_salary, aes(x = 0, y = 220000, label = cor), 
+            hjust = "inward", size = 3, col = "purple", inherit.aes = FALSE) +
+  theme(legend.position = "none")
+```
+&nbsp;
+
+##### $\color{blue}{\text{salary vs yrs.service}}$
+```{r "salary vs yrs.service"}  
+ggplot(Salaries, aes(yrs.service, salary)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  annotate("text", x = 4, y = 220000, parse = TRUE, col = "purple", 
+           label = str_c("~r ==~", round(cor(Salaries$yrs.service, Salaries$salary), 4))) +
+  annotate("text", x = 4, y = 210000, parse = TRUE, col = "purple", 
+           label = str_c("~r^2==~", round(cor(Salaries$yrs.service, Salaries$salary) ^ 2, 4)))
+```
+&nbsp;
+
+##### $\color{blue}{\text{Salary vs yrs.service by rank & discipline}}$
+```{r "Salary vs yrs.service by rank & discipline"}  
+Salaries %>%
+  group_by(discipline, rank) %>%
+  summarise(cor = round(cor(yrs.service, salary), 4)) %>%
+  mutate(cor = str_c("r = ", cor)) %>%
+  as.data.frame() -> cor_yrs.service_salary
+
+ggplot(Salaries, aes(yrs.service, salary, col = rank, shape = discipline)) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_grid(rank ~ discipline) +
+  geom_text(data = cor_yrs.service_salary, aes(x = 0, y = 220000, label = cor), 
+            hjust = "inward", size = 3, col = "purple", inherit.aes = FALSE) +
+  theme(legend.position = "none")
+```
+
+&nbsp;
+
+##### $\color{green}{\text{yrs.service vs yrs.since.phd}}$
+```{r "yrs.service vs yrs.since.phd"}  
+ggplot(Salaries, aes(yrs.since.phd, yrs.service))+
+  geom_point()+
+  scale_x_continuous(breaks = seq(0,60,5)) + 
+  scale_y_continuous(breaks = seq(0,65,5)) +
+  geom_abline(slope =1, intercept=0) +
+  annotate("text", x = 5, y = 55, parse = TRUE, col = "purple", 
+           label = str_c("~r ==~", round(cor(Salaries$yrs.since.phd, Salaries$yrs.service), 4)))
+```
+
+&nbsp;
+
+#### $\color{Red}{\text{Analysis Task}}$
+#####1. What percentage of records are Assistant Professors with less than 5 years of experience?
+```{r "Question 1"}
+mean(Salaries$rank == "AsstProf" & Salaries$yrs.service < 5)
+```
+$\color{green}{\text{15.87% of records are Assistant Professors with less than 5 years of experience}}$
+
+&nbsp;
+
+#####2. Is there a statistically significant difference between female and male salaries?
+```{r "Question 2"}
+wilcox.test(salary ~ sex, data = Salaries)
+```
+$\color{green}{\text{p-value of 0.008237 confirms that the difference in Male and Female salaries are statistically significant}}$
+
+&nbsp;
+
+#####3. What is the distribution of salary by rank and discipline?
+```{r "Question 3"}
+Salaries %>%
+  group_by(discipline, rank) %>%
+  mutate(Minimum = min(salary),
+         Lower_Quartile = quantile(salary, 0.25),
+         Median = median(salary),
+         Mean = mean(salary),
+         Upper_Quartile = quantile(salary, 0.75),
+         Maximum = max(salary)) %>%
+  ggplot(aes(salary, group = interaction(discipline, rank))) +
+  geom_density() +
+  geom_vline(aes(xintercept = Mean, col = "blue"), linetype = 2) +
+  geom_vline(aes(xintercept = Median, col = "green"), linetype = 2) +
+  geom_vline(aes(xintercept = Lower_Quartile, col = "red"), linetype = 2) +
+  geom_vline(aes(xintercept = Upper_Quartile, col = "red"), linetype = 2) +
+  facet_wrap(discipline ~ rank, scales = "free", labeller = label_context) +
+  scale_color_manual("Line Color", values = c("blue" = "blue", "green" = "green", "red" = "red"),
+                     labels = c("Mean", "Median", "Lower & Upper Quartiles")) +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "bottom")
+```
+
+&nbsp;
+
+#####4. How would you recode discipline as a 0/1 binary indicator?
+```{r "Question 4"}
+Salaries %>%
+  mutate(row = row_number(),
+         discipline = str_c("discipline_",discipline),
+         value = 1) %>%
+  spread(discipline, value, fill = 0) %>%
+  select(-row) %>%
+  str()
+```
+&nbsp;
+
+#### $\color{red}{\text{Build a predictive model using salary as the response}}$
+##### $\color{blue}{\text{Linear Model 1}}$
+```{r "Linear Model 1"}
+linear_mod_1 <- lm(salary ~ . -sex, data = Salaries)
+summary(linear_mod_1)
+```
+**Note:** I have excluded sex because it is not statistically significant when added with other variables
+
+&nbsp;
+
+##### $\color{green}{\text{Model Performance}}$
+$\color{purple}{\text{Adjusted R-squared = 0.4455}}$  
+yrs.since.phd, yrs.service, rank and discipline explain 44.55% of change in salary.  
+&nbsp;
+
+$\color{purple}{\text{Residual standard error = 22550}}$  
+The typical difference between the observed salary and the salary predicted by the model is about $22550.  
+&nbsp;
+
+
+#### $\color{blue}{\text{Linear Model 2}}$
+From my exploratory data analysis, I know that yrs.since.phd and yrs.service have week co-relation with salary especially when grouped by discipline and rank. 
+```{r "Linear Model 2"}
+linear_mod_2 <- lm(salary ~ discipline + rank, data = Salaries)
+summary(linear_mod_2)
+```
+
+&nbsp;
+
+##### $\color{green}{\text{Model Performance}}$
+$\color{purple}{\text{Adjusted R-squared = 0.4407}}$  
+rank and discipline explain 44.07% of change in salary.  
+&nbsp;
+
+$\color{purple}{\text{Residual standard error = 22650}}$  
+The typical difference between the observed salary and the salary predicted by the model is about $22650.  
+
+**Note: This model's Adjusted R-squared and Residual standard error are very close to linear_mod_1. Thus, we can conclude that yrs.since.phd & yrs.service have very little to no impact on salary **
+
+&nbsp;
+
+##### $\color{green}{\text{Predicted Salary}}$
+$\color{purple}{\text{salary = 13762 * is_associate_prof + 47844 * is_prof + 13761 * is_discipline_B + 71944}}$  
+
+* Salary for associate professor is $13762 more than assistant professor considering they have same discipline
+* Salary for professor is $47844 more than assistant professor considering they have same discipline
+* Salary for someone in discipline B is $13761 more than someone in discipline A considering they have same rank 
+```{r "Predicted Salary"}  
+linear_mod_2_aug <- augment(linear_mod_2) %>%
+  mutate(row_number = row_number())
+
+linear_mod_2_aug %>%
+  transmute(discipline, rank, Predicted_Salary = .fitted) %>%
+  distinct() %>%
+  spread(rank, Predicted_Salary)
+```
+
+&nbsp;
+
+##### $\color{green}{\text{Influential Points}}$  
+```{r "Influential Points Graph"}
+ggplot(linear_mod_2_aug, aes(row_number, .cooksd)) +
+  geom_point(alpha = 0.5) +
+  geom_hline(aes(yintercept = mean(.cooksd), col = "green"), linetype = 2) +
+  geom_hline(aes(yintercept = (4 * mean(.cooksd)), col = "red"), linetype = 2) +
+  geom_text_repel(aes(label = if_else(.cooksd > (4 * mean(.cooksd)), as.character(row_number), "")), 
+                  col = "red", size = 3) +
+  scale_color_manual("Line Color", values = c("green" = "green", "red" = "red"),
+                     labels=c("Mean", "4 * Mean"))
+```
+
+```{r "Influential Points"}
+linear_mod_2_aug %>%
+  filter(.cooksd > 4 * mean(.cooksd)) %>% 
+  arrange(desc(.cooksd)) %>%
+  select(-c(.hat, .sigma, .se.fit, .std.resid)) %>%
+  as.data.frame()
+```
+
+**Note:** This data should be analysed further (preferably with SME) and appropriate action should be taken before finalizing the model
+
+&nbsp;
+
+##### $\color{green}{\text{residual vs fitted}}$  
+```{r "residual vs fitted"}
+ggplot(linear_mod_2_aug, aes(.fitted, .resid)) +
+  geom_point(alpha = 0.2) +
+  geom_hline(aes(yintercept = 0))
+```
+
+**Note:** The resid vs fitted values plot shows that the model is relatively accurate when it predicts low values of salary, and highly inaccurate when it predicts high values of salary.
+
+&nbsp;
+
+#### $\color{red}{\text{Build a model to predict binary response}}$
+##### $\color{green}{\text{Creating 0/1 binary indicator using salary}}$
+```{r}
+(Salaries_binary <- Salaries %>%
+  mutate(salary_binary = if_else(salary < median(salary), 0 , 1)) %>%
+  as.tbl())
+```
+&nbsp;
+
+##### $\color{green}{\text{Splitting the data into 70% for training and 30% for testing the model}}$
+```{r}
+set.seed(1)
+sample_rows <- sample(nrow(Salaries_binary), nrow(Salaries_binary) * 0.7)
+
+Salaries_binary_train <- Salaries_binary[sample_rows,]
+Salaries_binary_test <- Salaries_binary[-sample_rows,]
+```
+&nbsp;
+
+#### $\color{blue}{\text{1. Logistic Regression:}}$
+```{r}
+logistic_model <- glm(salary_binary ~ discipline + rank , 
+                      data = Salaries_binary_train, family = "binomial")
+```
+&nbsp;
+
+##### $\color{green}{\text{Predicting salary_binary using test data}}$
+```{r}
+Salaries_logistic_test_out <- Salaries_binary_test %>%
+  mutate(outcome_prob = predict(logistic_model, Salaries_binary_test, type = "response"),
+         outcome_binary = if_else(outcome_prob > 0.5, 1, 0))
+```
+&nbsp;
+
+$\color{purple}{\text{Probability Prediction}}$
+```{r}
+Salaries_logistic_test_out %>%
+  distinct(discipline, rank, outcome_prob) %>%
+  spread(rank, outcome_prob)
+```
+&nbsp;
+
+$\color{purple}{\text{Binary Prediction (Threshold: >0.5)}}$
+```{r}
+Salaries_logistic_test_out %>%
+  distinct(discipline, rank, outcome_binary) %>%
+  spread(rank, outcome_binary)
+```
+&nbsp;
+
+##### $\color{green}{\text{Model Performance}}$
+```{r}
+confusionMatrix(as.factor(Salaries_logistic_test_out$outcome_binary), 
+                as.factor(Salaries_logistic_test_out$salary_binary),
+                positive = "1")
+```
+&nbsp;
+
+##### $\color{green}{\text{ROC curve}}$
+```{r}
+logistic_model_roc <- roc(Salaries_logistic_test_out$salary_binary, Salaries_logistic_test_out$outcome_binary)
+plot(logistic_model_roc, col = "blue", print.auc = TRUE)
+```
+&nbsp;
+
+#### $\color{blue}{\text{2. Decision Tree:}}$
+```{r}
+decision_tree_model <- rpart(salary_binary ~ discipline + rank, data = Salaries_binary_train, 
+                                      method = "class", control = rpart.control(cp = 0))
+
+rpart.plot(decision_tree_model, type = 4)
+```
+
+##### $\color{green}{\text{Predicting salary_binary using test data}}$
+```{r}
+Salaries_decisionTree_test_out <- Salaries_binary_test %>%
+  mutate(outcome_binary = predict(decision_tree_model, Salaries_binary_test, type = "class"),
+         outcome_binary = as.numeric(as.character(outcome_binary)))
+
+Salaries_decisionTree_test_out %>%
+  distinct(discipline, rank, outcome_binary) %>%
+  spread(rank, outcome_binary)
+```
+&nbsp;
+
+##### $\color{green}{\text{Model Performance}}$
+```{r}
+confusionMatrix(as.factor(Salaries_decisionTree_test_out$outcome_binary),
+                as.factor(Salaries_decisionTree_test_out$salary_binary),
+                positive = "1")
+```
+&nbsp;
+
+##### $\color{green}{\text{ROC curve}}$
+```{r}
+decisionTree_roc <- roc(Salaries_decisionTree_test_out$salary_binary, Salaries_decisionTree_test_out$outcome_binary)
+plot(decisionTree_roc, col = "blue", print.auc = TRUE)
+```
+&nbsp;
+
+#### $\color{red}{\text{Dataset Enhancement}}$
+**1. State at least three research questions you would like to address and describe your thought process behind how you formulated these research questions**
+
+  1. Is the salary difference across different ethnicity and race decreasing over the last 10 years?  
+     To find if the efforts to reduce ethnic and racial inequality is working or not for this profession.
+     
+  2. Is Number of international papers authored/co-authored a good predictor of salary?  
+     In addition to thier usual work, Professors continue to author or co-author papers/journals. Is this one of the variables used to measure their performance and does this get them a pay raise? 
+     
+  3. How does salary vary with the quality of benefits offered?  
+     To find if there is a decreasing trend between quality of benefits offered and salary.   
+
+**2. Prepare a list of 5-7 additional attributes you would like to add to the data set. Prepare a brief explanation for each attribute**  
+
+  1. ethnicity (fct) : Ethnicity of the professor
+  2. race (fct) : Race of the professor
+  3. year (num) : Year from 2009 - 2017
+  4. salary_year (num) : Salary corresponding to the year variable
+  5. international_papers_year (num) : Total number of international papers authored/co-authored corresponding to the year variable
+  6. vacation_days (num) : Total number of vacation days per year
+  7. health_insurance_quality (fct) : 1 - no insurance; 2 - poor; 3 - moderate; 4 - good; 5 - excellent
+  8. retirement_benefit_quality (fct) : 1 - no benefit; 2 - poor; 3 - moderate; 4 - good; 5 - excellent
+
+**3. Estimate and justify the appropriate sample size (and sampling technique, if desired) that would be required to address the research questions you defined**
+  
+  **Sampling size**  
+  I have no experience on this subject and my answer is based on my research on this topic.  
+  
+  Sample size is usually determined by the following factors: 
+  
+  1. Population size  
+  2. Confidence level  
+  3. Margin of error  
+    
+  There are Several available tools and methods to calculate the sample size using the above mentioned factors. One such method that i found during my research is Cochran Formula for Sample Size Calculation.
+  
+  **Sampling Technique**  
+  
+  1. Is the salary difference across different ethnicity and race decreasing over the last 10 years?es?  
+     Sampling Technique: Stratified Sampling (Groups: Ethnicity & Race)  
+     
+  2. Is Number of international papers authored/co-authored a good predictor of salary?  
+     Sampling Technique: Random Sampling  
+     
+  3. How does salary vary with the quality of benefits offered?  
+     Sampling Technique: Random Sampling 
